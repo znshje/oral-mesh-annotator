@@ -191,6 +191,7 @@ const Model: React.FC<{
     const meshRef = useRef<Mesh>(null)
     const instanceToSubmit = useRef<number>(0)
     const indicesToSubmit = useRef<Set<number>>(new Set())
+    const modelPathCache = useRef<string>('')
     const {camera, gl} = useThree()
 
     const loadLabel = useCallback(async () => {
@@ -498,6 +499,9 @@ const Model: React.FC<{
     useDebounceEffect(() => {
         try {
             dispatch(clearHistory())
+            if (modelPath === modelPathCache.current) return;
+
+            modelPathCache.current = modelPath;
             loadModel().then(() => loadLabel())
         } catch (e) {
             error(`load model failed: ${e}`)
@@ -515,7 +519,7 @@ const Model: React.FC<{
         }
         return () => {
         }
-    }, [loadModel, loadLabel, dispatch], {
+    }, [loadModel, loadLabel, modelPath, dispatch], {
         wait: 5
     })
 

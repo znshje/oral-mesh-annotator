@@ -1,6 +1,6 @@
 'use client'
 
-import {Button, Checkbox, Input, Select, Space, Typography} from "antd";
+import {Button, Input, Select, Space} from "antd";
 import {useAppDispatch, useAppSelector} from "@/lib/hooks";
 import {RootState} from "@/lib/store";
 import {setState} from "@/lib/features/controls/controlsSlice";
@@ -8,7 +8,7 @@ import {ArrowLeftOutlined, ArrowRightOutlined, FolderOpenOutlined} from "@ant-de
 import {open} from "@tauri-apps/plugin-dialog";
 import {readDir} from "@tauri-apps/plugin-fs";
 import {debug, error} from "@tauri-apps/plugin-log";
-import {useEffect, useState} from "react";
+import {useState} from "react";
 import {minimatch} from "minimatch";
 import {useDebounceEffect} from "ahooks";
 
@@ -90,13 +90,6 @@ const FileSelector: React.FC = () => {
                         directory: true,
                     }).then((selected) => {
                         dispatch(setState(state => state.files.workDir = selected))
-                        // loadCandidates(selected).then((candidates) => {
-                        //     if (candidates.length > 0) {
-                        //         dispatch(setState(state => state.files.selectedFile = 0))
-                        //     } else {
-                        //         dispatch(setState(state => state.files.selectedFile = -1))
-                        //     }
-                        // })
                     });
                 }}/>
             </Space.Compact>

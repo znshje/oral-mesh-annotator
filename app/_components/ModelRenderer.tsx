@@ -370,6 +370,8 @@ const Model: React.FC<{
         if (brushActive.current) {
             dispatch(recordHistory(new PaintRecord([...indicesToSubmit.current], instanceToSubmit.current)))
         }
+        indicesToSubmit.current.clear()
+        instanceToSubmit.current = 0
         brushActive.current = false
     }, [dispatch])
 
@@ -444,6 +446,8 @@ const Model: React.FC<{
 
             if (!lassoActive.current) {
                 // 激活新的套索选区
+                indicesToSubmit.current.clear()
+                instanceToSubmit.current = 0
                 lassoActive.current = true;
                 lassoPoints.current = [[e.offsetX, e.offsetY]]
                 lassoUpdatePath()

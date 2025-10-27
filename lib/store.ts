@@ -13,6 +13,7 @@ import {initialState as labelsInitialState} from './features/labels/labelsSlice'
 
 import {invoke} from "@tauri-apps/api/core";
 import {error} from "@tauri-apps/plugin-log";
+import {appConfigDir, join} from "@tauri-apps/api/path";
 
 const STATE_FILE = 'omastate.json'
 // 需要持久化的 slice
@@ -71,7 +72,8 @@ async function loadState() {
     try {
         // const appDir = await path.appDataDir();
         // const statePath = await join(appDir, STATE_FILE);
-        const statePath = STATE_FILE;
+        const statePath = await join(await appConfigDir(), STATE_FILE);
+        console.log(statePath)
         const content = await readTextFile(statePath);
         return JSON.parse(content);
     } catch (e) {
@@ -85,7 +87,8 @@ async function saveState(state: RootState) {
     try {
         // const appDir = await path.appDataDir();
         // const statePath = await join(appDir, STATE_FILE);
-        const statePath = STATE_FILE;
+        const statePath = await join(await appConfigDir(), STATE_FILE);
+        console.log(statePath)
 
         const partial: Record<string, RootState[keyof RootState]> = {};
         for (const key of PERSISTED_KEYS) {

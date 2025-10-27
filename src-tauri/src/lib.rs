@@ -3,6 +3,13 @@
 #[tauri::command]
 async fn save_state(path: String, data: String) -> Result<(), String> {
     std::thread::spawn(move || {
+        println!("Saving state to: {:?}", path);
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Failed to create config directory: {:?}", e);
+                return;
+            }
+        }
         if let Err(e) = std::fs::write(path, data) {
             eprintln!("Failed to save state: {:?}", e);
         }

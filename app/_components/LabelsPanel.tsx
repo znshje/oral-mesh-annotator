@@ -190,6 +190,13 @@ const LabelsPanel: React.FC = () => {
                     state.boundingBox = !state.boundingBox
                 }))
             }
+
+            if (e.key.toLowerCase() === 'w' && !(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+                e.preventDefault()
+                dispatch(setLabelState(state => {
+                    state.wireframe = !state.wireframe
+                }))
+            }
         }
         
         document.addEventListener('keydown', listener)
@@ -230,7 +237,7 @@ const LabelsPanel: React.FC = () => {
                         state.wireframe = e.target.checked
                     }))
                 }}
-            >网格</Checkbox>
+            >网格 (W)</Checkbox>
             <Typography.Title level={5}>标注</Typography.Title>
             <Radio.Group
                 value={toolMode}
@@ -277,7 +284,7 @@ const LabelsPanel: React.FC = () => {
             />
             <div style={{marginTop: 16,
                 display: toolMode === 'paint' ? undefined : 'none'}}>
-                <div>画笔大小</div>
+                <div>画笔大小 (滚轮)</div>
                 <div style={{
                     display: 'flex'
                 }}>

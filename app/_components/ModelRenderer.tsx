@@ -31,9 +31,8 @@ import {
     STLLoader,
     XYZLoader
 } from "three-stdlib";
-import {useDebounceEffect, useThrottleFn} from "ahooks";
+import {useDebounceEffect} from "ahooks";
 import {join} from "@tauri-apps/api/path";
-import {disposeObject3D} from "@/app/_lib/disposeObject3D";
 import {updateCamera} from "@/lib/features/camera/cameraSlice";
 import {error, info} from "@tauri-apps/plugin-log";
 import {
@@ -51,7 +50,7 @@ import {PaintRecord, LabelRecord, AddInstanceRecord, RemoveInstanceRecord} from 
 import {computeSelectedTriangles} from "./computeSelectedTriangles";
 import * as THREE from 'three';
 import {acceleratedRaycast, computeBoundsTree, disposeBoundsTree} from "three-mesh-bvh";
-import {clearHistory, recordHistory} from "../../lib/features/history/historySlice";
+import {clearHistory, recordHistory, redoStep, undoStep} from "../../lib/features/history/historySlice";
 import {mergeGeometries, mergeVertices} from "three/examples/jsm/utils/BufferGeometryUtils";
 
 type AsciiLoaderType = OBJLoader | XYZLoader
@@ -135,6 +134,7 @@ const PaintMouseCursor: React.FC<{
 }> = ({eventSource}) => {
     const {toolMode, paintSize} = useAppSelector((state: RootState) => state.labels)
     const ref = useRef<HTMLDivElement>(null)
+    const dispatch = useAppDispatch()
 
     const mouseMoveEvent = useCallback((e: MouseEvent) => {
         if (ref.current) {
@@ -153,6 +153,29 @@ const PaintMouseCursor: React.FC<{
         }
     }, [eventSource, mouseMoveEvent, toolMode])
 
+    useEffect(() => {
+        const wheelListener = (e: WheelEvent) => {
+            if (!e.ctrlKey && !e.altKey && !e.shiftKey) {
+                if (toolMode === 'paint') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    dispatch(setLabelState(state => {
+                        state.paintSize = Math.max(1, Math.ceil(state.paintSize - 2 * e.deltaY / 100))
+                    }))
+                    mouseMoveEvent(e)
+                }
+            }
+        }
+
+        eventSource.current?.addEventListener('wheel', wheelListener, {
+            passive: false
+        })
+
+        return () => {
+            eventSource.current?.removeEventListener('wheel', wheelListener)
+        }
+    }, [dispatch, eventSource, mouseMoveEvent, toolMode]);
+    
     return <div ref={ref} style={{
         width: paintSize,
         height: paintSize,
@@ -476,7 +499,7 @@ const Model: React.FC<{
     const lassoFinishSelection = useCallback(() => {
         lassoActive.current = false;
         lassoDrawing.current = false;
-        
+
         // 提交
         performLassoDraw()
 
@@ -498,7 +521,7 @@ const Model: React.FC<{
                     lassoFinishSelection()
                 }
             }
-            
+
             lassoUpdatePath();
         }
     }, [lassoFinishSelection, lassoUpdatePath])
@@ -506,7 +529,7 @@ const Model: React.FC<{
     //////////////// Lasso tool ////////////////
 
     //////////////// Instance picker ////////////////
-    
+
     const instancePickerListener = useCallback((e: KeyboardEvent) => {
         if (e.key.toLowerCase() === 'c' && !(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
             e.preventDefault()
@@ -814,7 +837,11 @@ export function CameraController() {
             // @ts-expect-error setMouseAction is not private in original three.js
             controlsRef.current.setMouseAction('PAN', 1)
             // @ts-expect-error setMouseAction is not private in original three.js
-            controlsRef.current.setMouseAction('ZOOM', 'WHEEL')
+            controlsRef.current.setMouseAction('ZOOM', 'WHEEL', 'CTRL')
+            // @ts-expect-error setMouseAction is not private in original three.js
+            controlsRef.current.setMouseAction('ZOOM', 'WHEEL', 'SHIFT')
+            // @ts-expect-error setMouseAction is not private in original three.js
+            controlsRef.current.setMouseAction('ZOOM', 1, 'CTRL')
         }
     }, [controls])
 
@@ -886,6 +913,7 @@ const ModelRenderer: React.FC = () => {
     const {workDir, candidates, selectedFile} = useAppSelector((state: RootState) => state.controls.files);
     const {toolMode} = useAppSelector((state: RootState) => state.labels);
     const containerRef = useRef<HTMLDivElement>(null)
+    const dispatch = useAppDispatch()
 
     const [modelPath, setModelPath] = useState<string>(undefined)
 

@@ -1,6 +1,6 @@
 'use client'
 
-import {Canvas, ThreeEvent, useFrame, useThree} from "@react-three/fiber";
+import {Canvas, useFrame, useThree} from "@react-three/fiber";
 import {useAppDispatch, useAppSelector} from "@/lib/hooks";
 import {RootState} from "@/lib/store";
 import React, {Suspense, useCallback, useEffect, useMemo, useRef, useState} from "react";
@@ -17,7 +17,7 @@ import {
     Mesh,
     NeutralToneMapping,
     Object3D,
-    OrthographicCamera as OrthographicCameraType, Ray, Raycaster,
+    OrthographicCamera as OrthographicCameraType,
     Vector3
 } from "three";
 import {ArcballControls, Bvh, Html, OrthographicCamera, useProgress} from "@react-three/drei";
@@ -50,7 +50,7 @@ import {PaintRecord, LabelRecord, AddInstanceRecord, RemoveInstanceRecord} from 
 import {computeSelectedTriangles} from "./computeSelectedTriangles";
 import * as THREE from 'three';
 import {acceleratedRaycast, computeBoundsTree, disposeBoundsTree} from "three-mesh-bvh";
-import {clearHistory, recordHistory, redoStep, undoStep} from "../../lib/features/history/historySlice";
+import {clearHistory, recordHistory} from "../../lib/features/history/historySlice";
 import {mergeGeometries, mergeVertices} from "three/examples/jsm/utils/BufferGeometryUtils";
 
 type AsciiLoaderType = OBJLoader | XYZLoader
@@ -155,7 +155,7 @@ const PaintMouseCursor: React.FC<{
 
     useEffect(() => {
         const wheelListener = (e: WheelEvent) => {
-            if (!e.ctrlKey && !e.altKey && !e.shiftKey) {
+            if (e.ctrlKey && !e.altKey && !e.shiftKey) {
                 if (toolMode === 'paint') {
                     e.preventDefault()
                     e.stopPropagation()
@@ -796,7 +796,7 @@ export function CameraController() {
     const controlsRef = useRef<ArcballControlsImpl>(null)
     const v3 = useRef(new Vector3())
 
-    const {controls, camera} = useThree()
+    const {controls, camera, gl} = useThree()
 
     useEffect(() => {
         if (cameraState.controlUpdateRequired) {
@@ -837,13 +837,54 @@ export function CameraController() {
             // @ts-expect-error setMouseAction is not private in original three.js
             controlsRef.current.setMouseAction('PAN', 1)
             // @ts-expect-error setMouseAction is not private in original three.js
-            controlsRef.current.setMouseAction('ZOOM', 'WHEEL', 'CTRL')
-            // @ts-expect-error setMouseAction is not private in original three.js
-            controlsRef.current.setMouseAction('ZOOM', 'WHEEL', 'SHIFT')
-            // @ts-expect-error setMouseAction is not private in original three.js
-            controlsRef.current.setMouseAction('ZOOM', 1, 'CTRL')
+            controlsRef.current.setMouseAction('ZOOM', 'WHEEL')
         }
     }, [controls])
+
+    useEffect(() => {
+        if (!controls) return
+
+        // handler：在 capture 阶段尝试阻止缩放
+        const onWheelCapture = (event) => {
+            // 如果按下 Ctrl 或 Shift，就阻止默认缩放行为
+            if (event.ctrlKey || event.shiftKey) {
+                // 并且从控件层面禁止缩放（以防库内部在别处处理）
+                try { controls.enableZoom = false } catch (e) {}
+            } else {
+                // 在没有按键时确保 enableZoom 打开
+                try { controls.enableZoom = true } catch (e) {}
+            }
+        }
+
+        // 当用户按下/松开键时，也更新 enableZoom（提高响应性）
+        const onKeyDown = (e) => {
+            if (e.key === 'Control' || e.key === 'Shift') {
+                try { controls.enableZoom = false } catch (err) {}
+            }
+        }
+        const onKeyUp = (e) => {
+            if (e.key === 'Control' || e.key === 'Shift') {
+                try { controls.enableZoom = true } catch (err) {}
+            }
+        }
+
+        // 注册在捕获阶段并确保 passive:false，使得 preventDefault 有效
+        controls.domElement.addEventListener('wheel', onWheelCapture, { passive: false, capture: true })
+        // 也在 window 上注册以防控件监听在别处
+        window.addEventListener('wheel', onWheelCapture, { passive: false, capture: true })
+
+        window.addEventListener('keydown', onKeyDown)
+        window.addEventListener('keyup', onKeyUp)
+
+        // 清理
+        return () => {
+            controls.domElement.removeEventListener('wheel', onWheelCapture, { capture: true })
+            window.removeEventListener('wheel', onWheelCapture, { capture: true })
+            window.removeEventListener('keydown', onKeyDown)
+            window.removeEventListener('keyup', onKeyUp)
+            try { controls.enableZoom = true } catch (e) {}
+        }
+    }, [gl, controls])
 
     return (
         <>
@@ -913,7 +954,6 @@ const ModelRenderer: React.FC = () => {
     const {workDir, candidates, selectedFile} = useAppSelector((state: RootState) => state.controls.files);
     const {toolMode} = useAppSelector((state: RootState) => state.labels);
     const containerRef = useRef<HTMLDivElement>(null)
-    const dispatch = useAppDispatch()
 
     const [modelPath, setModelPath] = useState<string>(undefined)
 

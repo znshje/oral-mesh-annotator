@@ -73,7 +73,6 @@ async function loadState() {
         // const appDir = await path.appDataDir();
         // const statePath = await join(appDir, STATE_FILE);
         const statePath = await join(await appConfigDir(), STATE_FILE);
-        console.log(statePath)
         const content = await readTextFile(statePath);
         return JSON.parse(content);
     } catch (e) {
@@ -88,8 +87,6 @@ async function saveState(state: RootState) {
         // const appDir = await path.appDataDir();
         // const statePath = await join(appDir, STATE_FILE);
         const statePath = await join(await appConfigDir(), STATE_FILE);
-        console.log(statePath)
-
         const partial: Record<string, RootState[keyof RootState]> = {};
         for (const key of PERSISTED_KEYS) {
             if (state[key] !== undefined) {

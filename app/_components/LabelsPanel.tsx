@@ -284,7 +284,7 @@ const LabelsPanel: React.FC = () => {
             />
             <div style={{marginTop: 16,
                 display: toolMode === 'paint' ? undefined : 'none'}}>
-                <div>画笔大小 (滚轮)</div>
+                <div>画笔大小 (CTRL+滚轮)</div>
                 <div style={{
                     display: 'flex'
                 }}>

@@ -1,10 +1,11 @@
 'use client'
 
-import {Canvas, useFrame, useThree} from "@react-three/fiber";
+import {Canvas, ThreeEvent, useFrame, useThree} from "@react-three/fiber";
 import {useAppDispatch, useAppSelector} from "@/lib/hooks";
 import {RootState} from "@/lib/store";
 import React, {Suspense, useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
+    Box3,
     BufferAttribute,
     BufferGeometry,
     DoubleSide,
@@ -16,7 +17,7 @@ import {
     Mesh,
     NeutralToneMapping,
     Object3D,
-    OrthographicCamera as OrthographicCameraType,
+    OrthographicCamera as OrthographicCameraType, Ray, Raycaster,
     Vector3
 } from "three";
 import {ArcballControls, Bvh, Html, OrthographicCamera, useProgress} from "@react-three/drei";
@@ -30,7 +31,7 @@ import {
     STLLoader,
     XYZLoader
 } from "three-stdlib";
-import {useDebounceEffect} from "ahooks";
+import {useDebounceEffect, useThrottleFn} from "ahooks";
 import {join} from "@tauri-apps/api/path";
 import {disposeObject3D} from "@/app/_lib/disposeObject3D";
 import {updateCamera} from "@/lib/features/camera/cameraSlice";
@@ -44,11 +45,12 @@ import {
     RectAreaLightJSON,
     SpotLightJSON
 } from "@/lib/features/lights/lightsSlice";
-import {getToothColor} from "../_lib/colors";
+import {colorToHex, getToothColor} from "../_lib/colors";
 import {setLabelState} from "../../lib/features/labels/labelsSlice";
 import {PaintRecord, LabelRecord, AddInstanceRecord, RemoveInstanceRecord} from "@/lib/features/history/historySlice";
 import {computeSelectedTriangles} from "./computeSelectedTriangles";
-import {MeshBVH} from "three-mesh-bvh";
+import * as THREE from 'three';
+import {acceleratedRaycast, computeBoundsTree, disposeBoundsTree} from "three-mesh-bvh";
 import {clearHistory, recordHistory} from "../../lib/features/history/historySlice";
 import {mergeGeometries, mergeVertices} from "three/examples/jsm/utils/BufferGeometryUtils";
 
@@ -56,6 +58,10 @@ type AsciiLoaderType = OBJLoader | XYZLoader
 type BinaryLoaderType = GLTFLoader | STLLoader | PLYLoader
 type LoaderType = AsciiLoaderType | BinaryLoaderType
 type GeometryLoaderType = STLLoader | PLYLoader
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 const Loader: React.FC = () => {
     const {progress} = useProgress()
@@ -171,7 +177,7 @@ const Model: React.FC<{
     loader: LoaderType,
     eventSource: React.RefObject<HTMLElement>
 }> = ({modelPath, loader, eventSource}) => {
-    const [model, setModel] = useState<GLTF | Group | BufferGeometry>()
+    const [model, setModel] = useState<BufferGeometry>()
     const {
         instances,
         labelMap,
@@ -179,7 +185,8 @@ const Model: React.FC<{
         paintSize,
         addRemove,
         wireframe,
-        currentInstance
+        currentInstance,
+        boundingBox
     } = useAppSelector((state: RootState) => state.labels)
     const {records, top} = useAppSelector((state: RootState) => state.history)
     const dispatch = useAppDispatch()
@@ -192,7 +199,7 @@ const Model: React.FC<{
     const instanceToSubmit = useRef<number>(0)
     const indicesToSubmit = useRef<Set<number>>(new Set())
     const modelPathCache = useRef<string>('')
-    const {camera, gl} = useThree()
+    const {camera, gl, raycaster, pointer} = useThree()
 
     const loadLabel = useCallback(async () => {
         if (!modelPath) return;
@@ -266,20 +273,22 @@ const Model: React.FC<{
         if (model instanceof BufferGeometry) {
             model.center()
             model.computeVertexNormals()
-            model.boundsTree = new MeshBVH(model)
+            model.computeBoundsTree()
+            model.computeBoundingBox()
             setColor(model, undefined, undefined)
 
             console.log('Loaded model with ', model.getAttribute('position').count, ' vertices')
+        } else {
+            throw new Error("Invalid model")
         }
 
         setModel(prev => {
             if (!prev) return model;
             if (prev instanceof BufferGeometry) {
+                if (!!prev.boundsTree) {
+                    prev.disposeBoundsTree()
+                }
                 prev.dispose()
-            } else if (prev instanceof Group) {
-                disposeObject3D(prev)
-            } else {
-                disposeObject3D((prev as GLTF).scene)
             }
             return model
         })
@@ -496,6 +505,47 @@ const Model: React.FC<{
 
     //////////////// Lasso tool ////////////////
 
+    //////////////// Instance picker ////////////////
+    
+    const instancePickerListener = useCallback((e: KeyboardEvent) => {
+        if (e.key.toLowerCase() === 'c' && !(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+            e.preventDefault()
+
+            raycaster.setFromCamera(pointer, camera)
+            const intersections = raycaster.intersectObject(meshRef.current)
+
+            if (intersections.length > 0) {
+                dispatch(setLabelState(state => {
+                    state.instancePicker = currentState.instances[intersections[0].face.a];
+                    state.currentInstance = state.instancePicker;
+                }))
+            }
+        }
+    }, [camera, currentState.instances, dispatch, pointer, raycaster])
+
+    //////////////// Tooth bounding boxes ////////////////
+
+    const toothBoundingBoxes = useMemo(() => {
+        if (!model || !boundingBox) return [];
+        const tempVec = new Vector3()
+        const position = (model as BufferGeometry).getAttribute('position').array
+        const boxes = labelMap.map(_ => new Box3())
+        const labels = currentState.realLabels
+        currentState.instances.forEach((inst, i) => {
+            if (labels[i] === 0) return;
+            tempVec.set(position[i * 3], position[i * 3 + 1], position[i * 3 + 2])
+            boxes[inst].expandByPoint(tempVec)
+        })
+        return boxes;
+    }, [boundingBox, currentState.instances, currentState.realLabels, labelMap, model])
+
+    useEffect(() => {
+        window.addEventListener('keypress', instancePickerListener)
+        return () => {
+            window.removeEventListener('keypress', instancePickerListener)
+        }
+    }, [instancePickerListener]);
+
     useDebounceEffect(() => {
         try {
             dispatch(clearHistory())
@@ -509,10 +559,6 @@ const Model: React.FC<{
                 if (!prev) return null;
                 if (prev instanceof BufferGeometry) {
                     prev.dispose()
-                } else if (prev instanceof Group) {
-                    disposeObject3D(prev)
-                } else {
-                    disposeObject3D((prev as GLTF).scene)
                 }
                 return null
             })
@@ -527,12 +573,6 @@ const Model: React.FC<{
         if (model) {
             if (model instanceof BufferGeometry) {
                 setColorAll(model, currentState.realLabels)
-            } else if (model instanceof Group) {
-                model.traverse(obj => {
-                    if (obj instanceof Mesh) {
-                        setColorAll(obj.geometry, currentState.realLabels)
-                    }
-                })
             }
         }
     }, [currentState.realLabels, model], {
@@ -618,6 +658,12 @@ const Model: React.FC<{
     }
     return <>
         {ret}
+        {toothBoundingBoxes.map((bbox, i) => (
+            <box3Helper
+                visible={currentState.labelMap[i] > 0}
+                key={`helper-bbox-${i}`}
+                args={[bbox, colorToHex(getToothColor(currentState.labelMap[i]))]} />
+        ))}
     </>
 }
 

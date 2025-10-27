@@ -15,6 +15,9 @@ export function disposeObject3D(object: THREE.Object3D) {
 
             // 释放 geometry
             if (meshLike.geometry) {
+                if (!!meshLike.geometry.boundsTree) {
+                    meshLike.geometry.disposeBoundsTree()
+                }
                 meshLike.geometry.dispose();
             }
 

@@ -42,3 +42,7 @@ export const getToothColor = (i: number, norm: boolean = false) => {
         return norm ? [toothColorBase[0][0] / 255., toothColorBase[0][1] / 255., toothColorBase[0][2] / 255.] : toothColorBase[0]
     }
 }
+
+export const colorToHex = (color: number[]) => {
+    return '#' + color.map(x => x.toString(16).padStart(2, '0')).join('')
+}

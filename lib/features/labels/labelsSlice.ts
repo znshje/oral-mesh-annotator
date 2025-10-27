@@ -8,7 +8,9 @@ interface LabelsState {
     labelMap: number[],
     paintSize: number,
     wireframe: boolean,
-    currentInstance: number
+    currentInstance: number,
+    instancePicker: number,
+    boundingBox: boolean
 }
 
 export const initialState: LabelsState = {
@@ -19,7 +21,9 @@ export const initialState: LabelsState = {
     labelMap: [],
     paintSize: 10,
     wireframe: false,
-    currentInstance: -1
+    currentInstance: -1,
+    instancePicker: -1,
+    boundingBox: false
 }
 
 export const labelsSlice = createSlice({

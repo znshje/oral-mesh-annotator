@@ -67,7 +67,7 @@ const LabelItem: React.FC<{
 }
 
 const LabelsPanel: React.FC = () => {
-    const {raw, instances, labelMap, addRemove, toolMode, paintSize, wireframe, currentInstance} = useAppSelector(state => state.labels)
+    const {raw, instances, labelMap, addRemove, toolMode, paintSize, wireframe, currentInstance, instancePicker, boundingBox} = useAppSelector(state => state.labels)
     const {workDir, selectedFile, candidates} = useAppSelector(state => state.controls.files)
     const {records, top} = useAppSelector((state: RootState) => state.history)
     const dispatch = useAppDispatch()
@@ -131,9 +131,14 @@ const LabelsPanel: React.FC = () => {
         dispatch(clearHistory())
     }, [dispatch])
 
+    const currentPickerColor = useMemo(() => {
+        const color = getToothColor(currentState.labelMap[instancePicker] ?? 0);
+        return `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+    }, [currentState.labelMap, instancePicker])
+
     useEffect(() => {
         const listener = (e: KeyboardEvent) => {
-            if (e.target !== document.body) {
+            if ((e.target as HTMLElement)?.tagName?.toLowerCase() === 'input') {
                 return;
             }
             if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
@@ -177,6 +182,13 @@ const LabelsPanel: React.FC = () => {
             if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
                 e.preventDefault()
                 saveResult()
+            }
+
+            if (e.key.toLowerCase() === 'q' && !(e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+                e.preventDefault()
+                dispatch(setLabelState(state => {
+                    state.boundingBox = !state.boundingBox
+                }))
             }
         }
         
@@ -266,25 +278,45 @@ const LabelsPanel: React.FC = () => {
             <div style={{marginTop: 16,
                 display: toolMode === 'paint' ? undefined : 'none'}}>
                 <div>画笔大小</div>
-                <Slider
-                    value={paintSize}
-                    min={1}
-                    max={50}
-                    step={1}
-                    onChange={v => {
-                        dispatch(setLabelState(state => {
-                            state.paintSize = v
-                        }))
-                    }}
-                />
-                <InputNumber
-                    value={paintSize.toString()}
-                    onChange={e => {
-                        dispatch(setLabelState(state => {
-                            state.paintSize = parseInt(e)
-                        }))
-                    }}
-                />
+                <div style={{
+                    display: 'flex'
+                }}>
+                    <Slider
+                        value={paintSize}
+                        min={1}
+                        max={50}
+                        step={1}
+                        onChange={v => {
+                            dispatch(setLabelState(state => {
+                                state.paintSize = v
+                            }))
+                        }}
+                        style={{flex: 1}}
+                    />
+                    <InputNumber
+                        value={paintSize.toString()}
+                        onChange={e => {
+                            dispatch(setLabelState(state => {
+                                state.paintSize = parseInt(e)
+                            }))
+                        }}
+                    />
+                </div>
+            </div>
+
+            <div style={{display: 'flex', gap: 16}}>
+                <div>实例选取 (C)</div>
+                <div style={{width: 24, height: 24, background: currentPickerColor}} />
+                <div>{instancePicker < 0 ? '无选择' : instancePicker} ({currentState.labelMap[instancePicker] ?? 0})</div>
+            </div>
+
+            <div style={{display: 'flex', gap: 16}}>
+                <div>显示包围盒 (Q)</div>
+                <Checkbox checked={boundingBox} onChange={e => {
+                    dispatch(setLabelState(state => {
+                        state.boundingBox = e.target.checked
+                    }))
+                }} />
             </div>
         </div>
         <div style={{

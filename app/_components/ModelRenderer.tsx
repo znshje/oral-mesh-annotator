@@ -460,12 +460,20 @@ const Model: React.FC<{
             }
 
             if (lassoDrawing.current) {
+                if (lassoPoints.current.length > 0) {
+                    if (Math.abs(e.offsetX - lassoPoints.current[lassoPoints.current.length - 1][0]) < 0.01 ||
+                        Math.abs(e.offsetY - lassoPoints.current[lassoPoints.current.length - 1][1]) < 0.01) {
+                        // do nothing
+                        return;
+                    }
+                }
                 lassoPoints.current.push([e.offsetX, e.offsetY]);
                 lassoUpdatePath();
             } else {
                 // 画出引导线
                 lassoUpdatePath();
             }
+            console.log('lasso move', lassoPoints.current)
 
         }
     }, [lassoUpdatePath])
@@ -484,9 +492,11 @@ const Model: React.FC<{
                 lassoActive.current = true;
                 lassoPoints.current = [[e.offsetX, e.offsetY]]
                 lassoUpdatePath()
+                console.log('lasso down, new area', lassoPoints.current)
             } else {
                 lassoPoints.current.push([e.offsetX, e.offsetY])
                 lassoUpdatePath()
+                console.log('lasso down', lassoPoints.current)
             }
             lassoDrawing.current = true
         }
@@ -494,11 +504,13 @@ const Model: React.FC<{
 
     const lassoMouseUpEvent = useCallback((e: PointerEvent) => {
         lassoDrawing.current = false
+        console.log('lasso up', lassoPoints.current)
     }, [])
 
     const lassoFinishSelection = useCallback(() => {
         lassoActive.current = false;
         lassoDrawing.current = false;
+        console.log('lasso finish', lassoPoints.current)
 
         // 提交
         performLassoDraw()
@@ -552,7 +564,7 @@ const Model: React.FC<{
         if (!model || !boundingBox) return [];
         const tempVec = new Vector3()
         const position = (model as BufferGeometry).getAttribute('position').array
-        const boxes = labelMap.map(_ => new Box3())
+        const boxes = currentState.labelMap.map(_ => new Box3())
         const labels = currentState.realLabels
         currentState.instances.forEach((inst, i) => {
             if (labels[i] === 0) return;
@@ -560,7 +572,7 @@ const Model: React.FC<{
             boxes[inst].expandByPoint(tempVec)
         })
         return boxes;
-    }, [boundingBox, currentState.instances, currentState.realLabels, labelMap, model])
+    }, [boundingBox, currentState.instances, currentState.labelMap, currentState.realLabels, model])
 
     useEffect(() => {
         window.addEventListener('keypress', instancePickerListener)

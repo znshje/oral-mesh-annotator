@@ -37,37 +37,44 @@ const FileSelector: React.FC = () => {
 
     const loadCandidates = async (root: string) => {
         if (!root) {
-            return []
+            return {candidates: [], updateWorkspace: true}
         }
         setLoading(true)
         try {
             const candidates = await readDirRecursive(root)
             debug(candidates.join(', '))
+            let updateWorkspace = true
             dispatch(setState(state => {
                 state.files.candidates = candidates
                 state.files.selectedCandidates = candidates
+
+                if (state.files.candidates.length === candidates.length &&
+                    candidates.filter((s, i) => s === state.files.candidates[i]).length > 0) {
+                    updateWorkspace = false
+                }
             }))
-            return candidates
+            return {candidates, updateWorkspace}
         } catch (e) {
             error(e)
             dispatch(setState(state => {
                 state.files.candidates = []
                 state.files.selectedCandidates = []
             }))
-            return []
+            return {candidates: [], updateWorkspace: true}
         } finally {
             setLoading(false)
         }
     }
 
     useDebounceEffect(() => {
-        loadCandidates(workDir).then((candidates) => {
+        loadCandidates(workDir).then(({candidates, updateWorkspace}) => {
+            if (!updateWorkspace) return;
             if (candidates.length > 0) {
                 dispatch(setState(state => state.files.selectedFile = 0))
             } else {
                 dispatch(setState(state => state.files.selectedFile = -1))
             }
-        })
+        }).catch(() => {})
     }, [workDir, filePattern])
 
     return <div style={{

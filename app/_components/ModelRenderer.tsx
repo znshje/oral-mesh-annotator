@@ -328,10 +328,14 @@ const Model: React.FC<{
             } else if (record instanceof LabelRecord) {
                 baseLabelMap[record.instance] = record.label
             } else if (record instanceof AddInstanceRecord) {
-                baseInstances.push(baseInstances.length)
                 baseLabelMap.push(0)
             } else if (record instanceof RemoveInstanceRecord) {
                 if (record.instance === baseLabelMap.length - 1) {
+                    for (let inst = 0; inst < baseInstances.length; inst++) {
+                        if (baseInstances[inst] === record.instance) {
+                            baseInstances[inst] = 0
+                        }
+                    }
                     baseLabelMap = baseLabelMap.slice(0, baseLabelMap.length - 1)
                 } else {
                     baseLabelMap[record.instance] = 0
@@ -341,8 +345,8 @@ const Model: React.FC<{
 
         return {
             realLabels: baseInstances.map(i => baseLabelMap[i]),
-            labelMap: baseLabelMap,
             instances: baseInstances,
+            labelMap: baseLabelMap
         }
     }, [instances, labelMap, records, top])
 
@@ -566,6 +570,7 @@ const Model: React.FC<{
         const position = (model as BufferGeometry).getAttribute('position').array
         const boxes = currentState.labelMap.map(_ => new Box3())
         const labels = currentState.realLabels
+        console.log(boxes, currentState.instances, labels, currentState.labelMap)
         currentState.instances.forEach((inst, i) => {
             if (labels[i] === 0) return;
             tempVec.set(position[i * 3], position[i * 3 + 1], position[i * 3 + 2])
@@ -861,27 +866,28 @@ export function CameraController() {
             // 如果按下 Ctrl 或 Shift，就阻止默认缩放行为
             if (event.ctrlKey || event.shiftKey) {
                 // 并且从控件层面禁止缩放（以防库内部在别处处理）
-                try { controls.enableZoom = false } catch (e) {}
+                try { (controls as ArcballControlsImpl).enableZoom = false } catch (e) {}
             } else {
                 // 在没有按键时确保 enableZoom 打开
-                try { controls.enableZoom = true } catch (e) {}
+                try { (controls as ArcballControlsImpl).enableZoom = true } catch (e) {}
             }
         }
 
         // 当用户按下/松开键时，也更新 enableZoom（提高响应性）
         const onKeyDown = (e) => {
             if (e.key === 'Control' || e.key === 'Shift') {
-                try { controls.enableZoom = false } catch (err) {}
+                try { (controls as ArcballControlsImpl).enableZoom = false } catch (err) {}
             }
         }
         const onKeyUp = (e) => {
             if (e.key === 'Control' || e.key === 'Shift') {
-                try { controls.enableZoom = true } catch (err) {}
+                try { (controls as ArcballControlsImpl).enableZoom = true } catch (err) {}
             }
         }
 
         // 注册在捕获阶段并确保 passive:false，使得 preventDefault 有效
-        controls.domElement.addEventListener('wheel', onWheelCapture, { passive: false, capture: true })
+        // @ts-expect-error domElement is not private in original three.js
+        (controls as ArcballControlsImpl).domElement.addEventListener('wheel', onWheelCapture, { passive: false, capture: true })
         // 也在 window 上注册以防控件监听在别处
         window.addEventListener('wheel', onWheelCapture, { passive: false, capture: true })
 
@@ -890,11 +896,12 @@ export function CameraController() {
 
         // 清理
         return () => {
-            controls.domElement.removeEventListener('wheel', onWheelCapture, { capture: true })
+            // @ts-expect-error domElement is not private in original three.js
+            (controls as typeof ArcballControlsImpl).domElement.removeEventListener('wheel', onWheelCapture, { capture: true })
             window.removeEventListener('wheel', onWheelCapture, { capture: true })
             window.removeEventListener('keydown', onKeyDown)
             window.removeEventListener('keyup', onKeyUp)
-            try { controls.enableZoom = true } catch (e) {}
+            try { (controls as ArcballControlsImpl).enableZoom = true } catch (e) {}
         }
     }, [gl, controls])
 
